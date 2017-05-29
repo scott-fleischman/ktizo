@@ -29,6 +29,7 @@ executable ktizo
     , path
     , stack
     , text
+    , unordered-containers
     , vector
     , yaml
   default-language: Haskell2010

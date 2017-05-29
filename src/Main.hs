@@ -2,9 +2,13 @@
 
 module Main where
 
+import           Control.Arrow ((&&&))
 import qualified Data.Aeson.Extended as Aeson
 import qualified Data.ByteString as Byte
+import           Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HashMap
 import qualified Data.String as String
+import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Vector (Vector)
 import qualified Data.Vector as Vector
@@ -20,7 +24,7 @@ main :: IO ()
 main = do
   auth <- getAuth
   branches <- getBranchShaMap auth "scott-fleischman" "greek-grammar"
-  mapM_ print branches -- GitHub.branchCommitSha . GitHub.branchCommit
+  mapM_ print $ HashMap.toList branches -- GitHub.branchCommitSha . GitHub.branchCommit
 
   stackFile <- getStackFile
   eglobal <- Yaml.decodeFileEither $ Path.toFilePath stackFile
@@ -31,15 +35,14 @@ main = do
       Right (Aeson.WithJSONWarnings (Stack.ProjectAndConfigMonoid project _) _) ->
         Byte.putStr $ Yaml.encode project
 
-getBranchShaMap :: Maybe GitHub.Auth -> Github.Name Github.Owner -> Github.Name Github.Repo -> IO (Vector Github.Branch)
+getBranchShaMap :: Maybe GitHub.Auth -> Github.Name Github.Owner -> Github.Name Github.Repo -> IO (HashMap Text Text)
 getBranchShaMap auth owner repo = do
   possibleBranches <- Github.branchesFor' auth owner repo
   case possibleBranches of
     Left error -> do
       putStrLn $ "Error: " ++ show error
-      return Vector.empty
-    Right branches -> return branches
---      mapM_ print branches -- GitHub.branchCommitSha . GitHub.branchCommit
+      return HashMap.empty
+    Right branches -> return . HashMap.fromList . Vector.toList . fmap (Github.branchName &&& GitHub.branchCommitSha . GitHub.branchCommit) $ branches
 
 getAuth :: IO (Maybe GitHub.Auth)
 getAuth = do
