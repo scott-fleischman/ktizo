@@ -1,6 +1,11 @@
 resolver: lts-8.15
 packages:
 - '.'
-extra-deps: []
+- location:
+    git: git@github.com:commercialhaskell/stack.git
+    commit: b80a9f4aa2382bc37a146cd4d4d345b963c156f0
+  extra-dep: true
+extra-deps:
+- path-0.5.12 # required for stack dep of <=0.5.12
 flags: {}
 extra-package-dbs: []

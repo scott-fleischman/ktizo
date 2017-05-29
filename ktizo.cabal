@@ -23,6 +23,11 @@ executable ktizo
       src
   build-depends:
       base
+    , bytestring
+    , directory
     , github
+    , path
+    , stack
     , text
+    , yaml
   default-language: Haskell2010

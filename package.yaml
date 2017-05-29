@@ -11,8 +11,13 @@ extra-source-files:
 
 dependencies:
   - base
+  - bytestring
+  - directory
   - github
+  - path
+  - stack
   - text
+  - yaml
 
 executables:
   ktizo:
