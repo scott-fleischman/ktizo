@@ -12,6 +12,7 @@ extra-source-files:
 dependencies:
   - base
   - github
+  - text
 
 executables:
   ktizo:
