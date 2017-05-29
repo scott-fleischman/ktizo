@@ -17,6 +17,7 @@ dependencies:
   - path
   - stack
   - text
+  - vector
   - yaml
 
 executables:

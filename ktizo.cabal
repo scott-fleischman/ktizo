@@ -29,5 +29,6 @@ executable ktizo
     , path
     , stack
     , text
+    , vector
     , yaml
   default-language: Haskell2010
