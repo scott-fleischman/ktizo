@@ -8,6 +8,7 @@ import qualified Data.Attoparsec.Text as Parsec
 import qualified Data.ByteString as Byte
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
+import qualified Data.List as List
 import           Data.Proxy (Proxy(..))
 import qualified Data.String as String
 import           Data.Text (Text)
@@ -24,11 +25,16 @@ import qualified System.Environment as Env
 
 main :: IO ()
 main = do
-  auth <- getAuth
   args <- Env.getArgs
-  stackFile <- getStackFile args
+  stackFile <- getStackFile $ removeOptions args
+  let branch = getBranchOption args
+  if branch == fallbackBranch
+    then putStrLn $ "Querying for branch " ++ Text.unpack branch
+    else putStrLn $ "Querying for branch " ++ Text.unpack branch ++ " with fallback to " ++ Text.unpack fallbackBranch
+
   project <- getProject stackFile
   let packages = Stack.projectPackages project
+  auth <- getAuth
   newPackages <- mapM (updatePackageEntry $ updatePackageLocation auth "dev_tag_info") packages
   let newProject = project { Stack.projectPackages = newPackages }
   Byte.putStr $ Yaml.encode newProject
@@ -38,19 +44,22 @@ updatePackageEntry f entry = do
   location <- f $ Stack.peLocation entry
   return entry { Stack.peLocation = location }
 
+fallbackBranch :: Text
+fallbackBranch = "master"
+
 updatePackageLocation :: Maybe Github.Auth -> Text -> Stack.PackageLocation -> IO Stack.PackageLocation
 updatePackageLocation auth branch orig@(Stack.PLRemote url (Stack.RPTGit sha)) = do
   (owner, repo) <- urlToOwnerRepo url
-  putStrLn $ "Getting branches for " ++ nameShow owner ++ "/" ++ nameShow repo
+  putStrLn $ "Getting latest commits for " ++ nameShow owner ++ "/" ++ nameShow repo
   branchMap <- getBranchShaMap auth owner repo
   case HashMap.lookup branch branchMap of
     Just newSha -> handleResult newSha branch
     Nothing ->
-      case HashMap.lookup fallbackBranch branchMap of
-        Just newSha -> handleResult newSha fallbackBranch
-        Nothing -> fail $ "Unable to find " ++ Text.unpack branch ++ " or master branch for " ++ Text.unpack url
+      case (branch == fallbackBranch, HashMap.lookup fallbackBranch branchMap) of
+        (False, Just newSha) -> handleResult newSha fallbackBranch
+        (True, Nothing) -> fail $ "Unable to find master branch for " ++ Text.unpack url
+        (False, Nothing) -> fail $ "Unable to find " ++ Text.unpack branch ++ " or master branch for " ++ Text.unpack url
   where
-  fallbackBranch = "master"
   handleResult newSha foundBranch = 
     if sha == newSha
     then return orig
@@ -116,3 +125,17 @@ getStackFile args =
           dir <- Path.parseAbsDir normalized
           file <- Path.parseRelFile defaultStackFile
           return $ dir Path.</> file
+
+removeOptions :: [String] -> [String]
+removeOptions = List.filter (not . isOptionPrefix)
+
+isOptionPrefix :: String -> Bool
+isOptionPrefix x = case List.stripPrefix "--" x of 
+  Just _ -> True
+  Nothing -> False
+
+getBranchOption :: [String] -> Text
+getBranchOption (arg : args) = case List.stripPrefix "--branch=" arg of
+  Just x -> Text.pack x
+  Nothing -> getBranchOption args
+getBranchOption [] = fallbackBranch
