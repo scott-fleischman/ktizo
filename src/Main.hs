@@ -37,7 +37,10 @@ main = do
   auth <- getAuth
   newPackages <- mapM (updatePackageEntry $ updatePackageLocation auth "dev_tag_info") packages
   let newProject = project { Stack.projectPackages = newPackages }
-  Byte.putStr $ Yaml.encode newProject
+
+  let stackFilePath = Path.toFilePath stackFile
+  putStrLn $ "Writing " ++ stackFilePath
+  Yaml.encodeFile stackFilePath newProject
 
 updatePackageEntry :: (Stack.PackageLocation -> IO Stack.PackageLocation) -> Stack.PackageEntry -> IO Stack.PackageEntry
 updatePackageEntry f entry = do
