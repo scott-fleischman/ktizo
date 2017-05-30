@@ -25,9 +25,11 @@ import qualified System.Environment as Env
 main :: IO ()
 main = do
   auth <- getAuth
-  project <- getProject
+  args <- Env.getArgs
+  stackFile <- getStackFile args
+  project <- getProject stackFile
   let packages = Stack.projectPackages project
-  newPackages <- mapM (updatePackageEntry $ updatePackageLocation auth) packages
+  newPackages <- mapM (updatePackageEntry $ updatePackageLocation auth "dev_tag_info") packages
   let newProject = project { Stack.projectPackages = newPackages }
   Byte.putStr $ Yaml.encode newProject
 
@@ -36,20 +38,26 @@ updatePackageEntry f entry = do
   location <- f $ Stack.peLocation entry
   return entry { Stack.peLocation = location }
 
-updatePackageLocation :: Maybe Github.Auth -> Stack.PackageLocation -> IO Stack.PackageLocation
-updatePackageLocation auth orig@(Stack.PLRemote url (Stack.RPTGit sha)) = do
+updatePackageLocation :: Maybe Github.Auth -> Text -> Stack.PackageLocation -> IO Stack.PackageLocation
+updatePackageLocation auth branch orig@(Stack.PLRemote url (Stack.RPTGit sha)) = do
   (owner, repo) <- urlToOwnerRepo url
   putStrLn $ "Getting branches for " ++ nameShow owner ++ "/" ++ nameShow repo
   branchMap <- getBranchShaMap auth owner repo
-  case HashMap.lookup "master" branchMap of
-    Just newSha ->
-      if sha == newSha
-      then return orig
-      else do
-        putStrLn $ "  updating to commit " ++ Text.unpack newSha
-        return $ Stack.PLRemote url (Stack.RPTGit newSha)
-    Nothing -> fail $ "Unable to find master branch for " ++ Text.unpack url
-updatePackageLocation _ location = return location
+  case HashMap.lookup branch branchMap of
+    Just newSha -> handleResult newSha branch
+    Nothing ->
+      case HashMap.lookup fallbackBranch branchMap of
+        Just newSha -> handleResult newSha fallbackBranch
+        Nothing -> fail $ "Unable to find " ++ Text.unpack branch ++ " or master branch for " ++ Text.unpack url
+  where
+  fallbackBranch = "master"
+  handleResult newSha foundBranch = 
+    if sha == newSha
+    then return orig
+    else do
+      putStrLn $ "  on branch " ++ Text.unpack foundBranch ++ " updating to commit " ++ Text.unpack newSha
+      return $ Stack.PLRemote url (Stack.RPTGit newSha)
+updatePackageLocation _ _ location = return location
 
 urlToOwnerRepo :: Text -> IO (Github.Name GitHub.Owner, Github.Name Github.Repo)
 urlToOwnerRepo url =
@@ -66,9 +74,8 @@ urlToOwnerRepo url =
   Parsec.Done _ r -> return r
   f -> fail . Text.unpack $ Text.concat ["Unable to parse url: ", url, " -- ", Text.pack (show f)]
 
-getProject :: IO Stack.Project
-getProject = do
-  stackFile <- getStackFile
+getProject :: Path.Path Path.Abs Path.File -> IO Stack.Project
+getProject stackFile = do
   eglobal <- Yaml.decodeFileEither $ Path.toFilePath stackFile
   case eglobal of
     Left decodeError -> fail $ "Error decoding global stack.yaml: " ++ show decodeError
@@ -91,11 +98,10 @@ getAuth = do
 nameShow :: GitHub.Name a -> String
 nameShow = Text.unpack . Github.untagName
 
-getStackFile :: IO (Path.Path Path.Abs Path.File)
-getStackFile = do
+getStackFile :: [String] -> IO (Path.Path Path.Abs Path.File)
+getStackFile args =
   let defaultStackFile = "stack.yaml"
-  args <- Env.getArgs
-  case args of
+  in case args of
     [] -> do
       currentDirString <- Dir.getCurrentDirectory
       currentDir <- Path.parseAbsDir currentDirString
