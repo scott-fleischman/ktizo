@@ -22,7 +22,8 @@ executable ktizo
   hs-source-dirs:
       src
   build-depends:
-      base
+      attoparsec
+    , base
     , bytestring
     , directory
     , github

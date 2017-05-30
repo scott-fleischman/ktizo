@@ -1,4 +1,4 @@
-# Ktizo
+# κτίζω (ktizo)
 Update GitHub dependencies in Haskell `stack.yaml` files.
 
 ## Installation
