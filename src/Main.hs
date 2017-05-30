@@ -25,18 +25,34 @@ import qualified System.Environment as Env
 main :: IO ()
 main = do
   auth <- getAuth
-  branches <- getBranchShaMap auth "scott-fleischman" "greek-grammar"
-  mapM_ print $ HashMap.toList branches -- GitHub.branchCommitSha . GitHub.branchCommit
-
   project <- getProject
-  print project
-  Byte.putStr $ Yaml.encode project
+  let packages = Stack.projectPackages project
+  newPackages <- mapM (updatePackageEntry $ updatePackageLocation auth) packages
+  let newProject = project { Stack.projectPackages = newPackages }
+  Byte.putStr $ Yaml.encode newProject
 
-  url <- getUrl "git@github.com:commercialhaskell/stack.git"
-  print url
+updatePackageEntry :: (Stack.PackageLocation -> IO Stack.PackageLocation) -> Stack.PackageEntry -> IO Stack.PackageEntry
+updatePackageEntry f entry = do
+  location <- f $ Stack.peLocation entry
+  return entry { Stack.peLocation = location }
 
-getUrl :: Text -> IO (Github.Name GitHub.Owner, Github.Name Github.Repo)
-getUrl url =
+updatePackageLocation :: Maybe Github.Auth -> Stack.PackageLocation -> IO Stack.PackageLocation
+updatePackageLocation auth orig@(Stack.PLRemote url (Stack.RPTGit sha)) = do
+  (owner, repo) <- urlToOwnerRepo url
+  putStrLn $ "Getting branches for " ++ nameShow owner ++ "/" ++ nameShow repo
+  branchMap <- getBranchShaMap auth owner repo
+  case HashMap.lookup "master" branchMap of
+    Just newSha ->
+      if sha == newSha
+      then return orig
+      else do
+        putStrLn $ "  updating to commit " ++ Text.unpack newSha
+        return $ Stack.PLRemote url (Stack.RPTGit newSha)
+    Nothing -> fail $ "Unable to find master branch for " ++ Text.unpack url
+updatePackageLocation _ location = return location
+
+urlToOwnerRepo :: Text -> IO (Github.Name GitHub.Owner, Github.Name Github.Repo)
+urlToOwnerRepo url =
   case Parsec.parse
     (do
       _ <- Parsec.string "git@github.com:"
